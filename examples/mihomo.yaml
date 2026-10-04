@@ -1,0 +1,33 @@
+# Merge these fields into your existing Mihomo configuration.
+# Replace the two sample names below with exact, existing node names.
+# Do not create a second `proxy-groups:` or `listeners:` key in the same file.
+external-controller: 192.168.50.110:9090
+secret: replace-with-your-controller-secret
+profile:
+  store-selected: true
+
+proxy-groups:
+  - name: Emby Prober
+    type: select
+    proxies: &emby-candidates
+      - "[🍃] 🇸🇬 SGP 狮城 01"
+      - "[🍃] 🇺🇸 USA 美国 01"
+
+  - name: Emby Probe Test
+    type: select
+    hidden: true
+    proxies: *emby-candidates
+
+  # If this group already exists, add "Emby Prober" to its proxies list
+  # and select it in your dashboard; do not replace the existing group.
+  - name: "🎬 Emby Exit"
+    type: select
+    proxies:
+      - Emby Prober
+
+listeners:
+  - name: emby-prober
+    type: mixed
+    listen: 192.168.50.110
+    port: 17891
+    proxy: Emby Probe Test

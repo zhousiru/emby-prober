@@ -1,0 +1,15 @@
+services:
+  emby-prober:
+    image: ghcr.io/zhousiru/emby-prober:latest
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./config.json:/config/config.json:ro
+      - state:/state
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  state:

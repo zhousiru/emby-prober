@@ -1,0 +1,30 @@
+{
+  "emby": {
+    "url": "https://emby.example.com/emby",
+    "username": "your-emby-user",
+    "password_env": "EMBY_PASSWORD",
+    "device_id": "emby-prober-home",
+    "item_id": "",
+    "media_source_id": "",
+    "stream_path": "",
+    "api_proxy_url": ""
+  },
+  "mihomo": {
+    "url": "http://192.168.50.110:9090",
+    "secret_env": "MIHOMO_SECRET",
+    "group": "Emby Prober",
+    "probe_group": "Emby Probe Test",
+    "probe_proxy_url": "http://192.168.50.110:17891"
+  },
+  "probe": {
+    "interval": "30m",
+    "timeout": "15s",
+    "max_bytes": 67108864,
+    "min_bytes": 262144,
+    "offset": 1048576,
+    "samples": 2,
+    "switch_improvement": 0.2,
+    "min_hold": "5m"
+  },
+  "state_dir": "/state"
+}
