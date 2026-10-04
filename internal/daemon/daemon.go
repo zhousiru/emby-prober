@@ -24,19 +24,25 @@ type Score struct {
 	Valid bool    `json:"valid"`
 }
 type Status struct {
-	Started    time.Time      `json:"started_at"`
-	Finished   time.Time      `json:"finished_at"`
-	Controller string         `json:"controller"`
-	Group      string         `json:"group"`
-	Item       string         `json:"item_id,omitempty"`
-	Previous   string         `json:"previous"`
-	Selected   string         `json:"selected"`
-	Winner     string         `json:"winner,omitempty"`
-	Reason     string         `json:"reason"`
-	LastSwitch time.Time      `json:"last_switch"`
-	DryRun     bool           `json:"dry_run"`
-	Results    []probe.Result `json:"results"`
-	Scores     []Score        `json:"scores"`
+	RTT          []Availability `json:"rtt,omitempty"`
+	ProbeOrder   []string       `json:"probe_order,omitempty"`
+	Skipped      []string       `json:"skipped,omitempty"`
+	StoppedEarly bool           `json:"stopped_early"`
+	StopNode     string         `json:"stop_node,omitempty"`
+	StopMbps     float64        `json:"stop_mbps"`
+	Started      time.Time      `json:"started_at"`
+	Finished     time.Time      `json:"finished_at"`
+	Controller   string         `json:"controller"`
+	Group        string         `json:"group"`
+	Item         string         `json:"item_id,omitempty"`
+	Previous     string         `json:"previous"`
+	Selected     string         `json:"selected"`
+	Winner       string         `json:"winner,omitempty"`
+	Reason       string         `json:"reason"`
+	LastSwitch   time.Time      `json:"last_switch"`
+	DryRun       bool           `json:"dry_run"`
+	Results      []probe.Result `json:"results"`
+	Scores       []Score        `json:"scores"`
 }
 type Runner struct {
 	cfg        config.Config
@@ -44,7 +50,6 @@ type Runner struct {
 	mihomo     *mihomo.Client
 	log        *slog.Logger
 	lastSwitch time.Time
-	round      int
 }
 
 func New(c config.Config, l *slog.Logger) (*Runner, error) {
@@ -179,20 +184,26 @@ func (r *Runner) Round(ctx context.Context, dryRun bool) (retErr error) {
 			r.log.Warn("could not restore test group", "error", e)
 		}
 	}()
+	order, checks, err := r.order(ctx, nodes, s.Previous)
+	s.RTT = checks
+	s.ProbeOrder = order
+	s.StopMbps = r.cfg.Probe.StopMbps
+	if err != nil {
+		return err
+	}
+	if len(order) == 0 {
+		s.Reason = "no nodes passed RTT check; keep current selection"
+		r.log.Warn(s.Reason)
+		return nil
+	}
 	r.emby.BeginRound()
 	s.Item, err = r.emby.Item(ctx)
 	if err != nil {
 		return err
 	}
-	r.log.Info("probe round started", "candidates", len(nodes), "samples", r.cfg.Probe.Samples, "item_id", s.Item)
-	for sample := 0; sample < r.cfg.Probe.Samples; sample++ {
-		// Rotate the start and reverse alternate passes to reduce time-of-test bias.
-		for j := 0; j < len(nodes); j++ {
-			idx := (j + r.round) % len(nodes)
-			if sample%2 == 1 {
-				idx = len(nodes) - 1 - idx
-			}
-			node := nodes[idx]
+	r.log.Info("probe round started", "candidates", len(nodes), "available", len(order), "samples", r.cfg.Probe.Samples, "item_id", s.Item)
+	for position, node := range order {
+		for sample := 0; sample < r.cfg.Probe.Samples; sample++ {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -231,9 +242,20 @@ func (r *Runner) Round(ctx context.Context, dryRun bool) (retErr error) {
 			}
 			s.Results = append(s.Results, v)
 			r.log.Info("sample", "node", node, "sample", sample+1, "mbps", fmt.Sprintf("%.2f", v.Mbps), "ttfb_seconds", v.TTFB, "valid", v.Valid, "http_status", v.Status, "error", v.Error)
+			if !v.Valid {
+				break
+			} // no need to spend more data on an ineligible node
+		}
+		score := Scores([]string{node}, s.Results, r.cfg.Probe.Samples)[0]
+		if r.cfg.Probe.StopMbps > 0 && score.Valid && score.Mbps >= r.cfg.Probe.StopMbps {
+			s.StoppedEarly = true
+			s.StopNode = node
+			s.Skipped = append(s.Skipped, order[position+1:]...)
+			r.log.Info("throughput target reached; stop probing", "node", node, "mbps", score.Mbps, "target_mbps", r.cfg.Probe.StopMbps, "skipped", len(s.Skipped))
+			break
 		}
 	}
-	r.round++
+
 	s.Scores = Scores(nodes, s.Results, r.cfg.Probe.Samples)
 	next, reason := Choose(s.Scores, s.Previous, r.cfg.Probe.SwitchImprovement, time.Since(r.lastSwitch) < r.cfg.Probe.MinHold.Value())
 	s.Winner = next

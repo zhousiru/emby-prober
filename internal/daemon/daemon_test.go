@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -65,6 +66,10 @@ func TestRoundThroughDedicatedProxy(t *testing.T) {
 					return
 				}
 				name := req.URL.Path[len("/proxies/"):]
+				if strings.HasSuffix(name, "/delay") {
+					fmt.Fprint(w, `{"delay":10}`)
+					return
+				}
 				if req.Method == "GET" {
 					json.NewEncoder(w).Encode(groups[name])
 					return
@@ -168,7 +173,11 @@ func TestRoundThroughDedicatedProxy(t *testing.T) {
 			if err = json.Unmarshal(raw, &status); err != nil {
 				t.Fatal(err)
 			}
-			if len(status.Results) != 4 {
+			wantResults := 4
+			if tc.blocked {
+				wantResults = 2
+			}
+			if len(status.Results) != wantResults {
 				t.Fatal("missing results")
 			}
 		})

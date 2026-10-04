@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -123,4 +124,26 @@ func Candidates(all map[string]Proxy, group, testGroup string) ([]string, error)
 		return nil, errors.New("managed group contains no proxy nodes")
 	}
 	return nodes, nil
+}
+
+// Delay asks the existing core to check this individual node without changing
+// any group selection. A per-request deadline also bounds unresponsive APIs.
+func (c *Client) Delay(ctx context.Context, node, target string, timeout time.Duration) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout+time.Second)
+	defer cancel()
+	q := url.Values{"url": {target}, "timeout": {strconv.FormatInt(timeout.Milliseconds(), 10)}, "expected": {"200-299"}}
+	var out struct {
+		Delay *int `json:"delay"`
+	}
+	client := *c.http
+	client.Timeout = 0 // the context includes the configured core timeout
+	scoped := *c
+	scoped.http = &client
+	if err := scoped.call(ctx, http.MethodGet, "/proxies/"+url.PathEscape(node)+"/delay?"+q.Encode(), nil, &out); err != nil {
+		return 0, err
+	}
+	if out.Delay == nil || *out.Delay <= 0 {
+		return 0, errors.New("node returned no usable RTT")
+	}
+	return *out.Delay, nil
 }

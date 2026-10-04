@@ -17,6 +17,9 @@
     "probe_proxy_url": "http://192.168.50.110:17891"
   },
   "probe": {
+    "rtt_url": "https://www.gstatic.com/generate_204",
+    "rtt_timeout": "5s",
+    "stop_mbps": 100,
     "interval": "30m",
     "timeout": "15s",
     "max_bytes": 67108864,

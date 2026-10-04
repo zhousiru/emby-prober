@@ -47,6 +47,9 @@ type Mihomo struct {
 	Secret        string `json:"-"`
 }
 type Probe struct {
+	RTTURL            string   `json:"rtt_url"`
+	RTTTimeout        Duration `json:"rtt_timeout"`
+	StopMbps          float64  `json:"stop_mbps"`
 	Interval          Duration `json:"interval"`
 	Timeout           Duration `json:"timeout"`
 	MaxBytes          int64    `json:"max_bytes"`
@@ -64,7 +67,7 @@ type Config struct {
 }
 
 func Defaults() Config {
-	return Config{StateDir: "state", Emby: Emby{DeviceID: "emby-prober"}, Mihomo: Mihomo{Group: "Emby Prober", ProbeGroup: "Emby Probe Test"}, Probe: Probe{Interval: Duration(30 * time.Minute), Timeout: Duration(15 * time.Second), MaxBytes: 64 << 20, MinBytes: 256 << 10, Offset: 1 << 20, Samples: 2, SwitchImprovement: 0.2, MinHold: Duration(5 * time.Minute)}}
+	return Config{StateDir: "state", Emby: Emby{DeviceID: "emby-prober"}, Mihomo: Mihomo{Group: "Emby Prober", ProbeGroup: "Emby Probe Test"}, Probe: Probe{RTTURL: "https://www.gstatic.com/generate_204", RTTTimeout: Duration(5 * time.Second), Interval: Duration(30 * time.Minute), Timeout: Duration(15 * time.Second), MaxBytes: 64 << 20, MinBytes: 256 << 10, Offset: 1 << 20, Samples: 2, SwitchImprovement: 0.2, MinHold: Duration(5 * time.Minute)}}
 }
 func Load(path string) (Config, error) {
 	c := Defaults()
@@ -146,6 +149,12 @@ func (c Config) Validate() error {
 	}
 	if c.Probe.Interval.Value() <= 0 || c.Probe.Timeout.Value() <= 0 || c.Probe.MinHold.Value() < 0 {
 		return errors.New("invalid probe durations")
+	}
+	if c.Probe.RTTURL != "" && !validURL(c.Probe.RTTURL, false) {
+		return errors.New("probe.rtt_url must be an HTTP(S) URL without credentials or query strings, or empty to disable")
+	}
+	if c.Probe.RTTTimeout.Value() < time.Millisecond || c.Probe.RTTTimeout.Value() > time.Minute || c.Probe.StopMbps < 0 {
+		return errors.New("rtt_timeout must be 1ms..1m and stop_mbps must be nonnegative")
 	}
 	if c.Probe.MinBytes < 1 || c.Probe.MaxBytes < c.Probe.MinBytes || c.Probe.MaxBytes > 1<<40 || c.Probe.Offset < 0 || c.Probe.Offset > 1<<50 {
 		return errors.New("invalid probe byte limits")

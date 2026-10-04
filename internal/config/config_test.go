@@ -23,3 +23,22 @@ func TestLoadSecretsAndStrictConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestProbeControlsValidation(t *testing.T) {
+	c := Defaults()
+	c.Emby.URL = "https://emby.test"
+	c.Emby.Username = "u"
+	c.Emby.PasswordEnv = "PASSWORD"
+	c.Mihomo.URL = "http://localhost:9090"
+	c.Mihomo.ProbeProxyURL = "http://localhost:17891"
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*Config){func(c *Config) { c.Probe.StopMbps = -1 }, func(c *Config) { c.Probe.RTTTimeout = 0 }, func(c *Config) { c.Probe.RTTURL = "file:///etc/passwd" }} {
+		invalid := c
+		mutate(&invalid)
+		if err := invalid.Validate(); err == nil {
+			t.Fatal("invalid probe setting accepted")
+		}
+	}
+}
