@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/robfig/cron/v3"
 	"io"
 	"net/url"
 	"os"
 	"time"
+	_ "time/tzdata"
 )
 
 type Duration time.Duration
@@ -51,6 +53,7 @@ type Probe struct {
 	RTTTimeout        Duration `json:"rtt_timeout"`
 	StopMbps          float64  `json:"stop_mbps"`
 	Interval          Duration `json:"interval"`
+	Cron              string   `json:"cron"`
 	Timeout           Duration `json:"timeout"`
 	MaxBytes          int64    `json:"max_bytes"`
 	MinBytes          int64    `json:"min_bytes"`
@@ -147,8 +150,11 @@ func (c Config) Validate() error {
 	if c.StateDir == "" || c.Emby.DeviceID == "" {
 		return errors.New("state_dir and emby.device_id must not be empty")
 	}
-	if c.Probe.Interval.Value() <= 0 || c.Probe.Timeout.Value() <= 0 || c.Probe.MinHold.Value() < 0 {
+	if (c.Probe.Cron == "" && c.Probe.Interval.Value() <= 0) || c.Probe.Timeout.Value() <= 0 || c.Probe.MinHold.Value() < 0 {
 		return errors.New("invalid probe durations")
+	}
+	if _, err := c.Probe.Schedule(); err != nil {
+		return err
 	}
 	if c.Probe.RTTURL != "" && !validURL(c.Probe.RTTURL, false) {
 		return errors.New("probe.rtt_url must be an HTTP(S) URL without credentials or query strings, or empty to disable")
@@ -169,4 +175,23 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// Schedule accepts five cron fields and an optional CRON_TZ prefix.
+// Embed timezone data for scratch containers; default to UTC on every host.
+func (p Probe) Schedule() (cron.Schedule, error) {
+	if p.Cron == "" {
+		return nil, nil
+	}
+	s, err := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow).Parse(p.Cron)
+	if err != nil {
+		return nil, fmt.Errorf("invalid probe.cron: %w", err)
+	}
+	if spec, ok := s.(*cron.SpecSchedule); ok && spec.Location == time.Local {
+		spec.Location = time.UTC
+	}
+	if s.Next(time.Now()).IsZero() {
+		return nil, errors.New("probe.cron has no future occurrence")
+	}
+	return s, nil
 }

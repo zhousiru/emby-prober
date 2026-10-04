@@ -284,20 +284,44 @@ func (r *Runner) Round(ctx context.Context, dryRun bool) (retErr error) {
 	return nil
 }
 func (r *Runner) Run(ctx context.Context, dryRun bool) error {
+	schedule, err := r.cfg.Probe.Schedule()
+	if err != nil {
+		return err
+	}
 	for {
+		if schedule != nil {
+			next := schedule.Next(time.Now())
+			if next.IsZero() {
+				return errors.New("probe.cron has no future occurrence")
+			}
+			r.log.Info("waiting for scheduled probe", "cron", r.cfg.Probe.Cron, "next_run", next)
+			if !wait(ctx, time.Until(next)) {
+				return nil
+			}
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
 		if err := r.Round(ctx, dryRun); err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
 			r.log.Error("probe round failed", "error", err)
 		}
-		// Intervals are measured from completion, so slow rounds never overlap.
-		timer := time.NewTimer(r.cfg.Probe.Interval.Value())
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		// Runs are sequential. Cron slots missed during a slow round are skipped.
+		if schedule == nil && !wait(ctx, r.cfg.Probe.Interval.Value()) {
 			return nil
-		case <-timer.C:
 		}
+	}
+}
+
+func wait(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }

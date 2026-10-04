@@ -80,6 +80,7 @@ docker compose logs -f
 | `rtt_timeout` | `5s` | 每个节点的 RTT 检查超时 |
 | `stop_mbps` | `0`（示例为 `100`） | 达到此 Mbps 后停止本轮测速，`0` 表示测完所有可用节点 |
 | `interval` | `30m` | 每轮结束后的等待时间 |
+| `cron` | 空 | 五字段 cron，可带 `CRON_TZ`；设置后替代 interval，默认时区 UTC |
 | `timeout` | `15s` | 每次下载的总时间上限 |
 | `max_bytes` | `67108864` | 每次最多64 MiB |
 | `min_bytes` | `262144` | 有效样本至少256 KiB |
@@ -87,6 +88,8 @@ docker compose logs -f
 | `samples` | `2` | 每节点采样次数 |
 | `switch_improvement` | `0.2` | 比当前节点快超过20%才切换 |
 | `min_hold` | `5m` | 两次切换的最短间隔，当前节点失败时除外 |
+
+例如 `"cron": "CRON_TZ=Asia/Shanghai 0 1,7,13,19 * * *"` 按北京时间每天四次运行。cron 模式启动后等待下个时间点，不立即测速；不会并发执行或补跑错过的时间点。手动执行仍可用 `--once`。
 
 每轮先通过 Mihomo 检查连通性与 RTT（最多4个并发），跳过检查失败的节点，再按 RTT 从低到高逐个下载视频。RTT 只用于筛选和排序，不能代替片源吞吐量；若检测地址在你的网络不可用，请换地址或把 `rtt_url` 设为空字符串。
 
