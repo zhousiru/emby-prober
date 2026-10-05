@@ -288,17 +288,8 @@ func (r *Runner) Run(ctx context.Context, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	// Both cron and interval modes probe once on startup.
 	for {
-		if schedule != nil {
-			next := schedule.Next(time.Now())
-			if next.IsZero() {
-				return errors.New("probe.cron has no future occurrence")
-			}
-			r.log.Info("waiting for scheduled probe", "cron", r.cfg.Probe.Cron, "next_run", next)
-			if !wait(ctx, time.Until(next)) {
-				return nil
-			}
-		}
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -309,7 +300,16 @@ func (r *Runner) Run(ctx context.Context, dryRun bool) error {
 			r.log.Error("probe round failed", "error", err)
 		}
 		// Runs are sequential. Cron slots missed during a slow round are skipped.
-		if schedule == nil && !wait(ctx, r.cfg.Probe.Interval.Value()) {
+		delay := r.cfg.Probe.Interval.Value()
+		if schedule != nil {
+			next := schedule.Next(time.Now())
+			if next.IsZero() {
+				return errors.New("probe.cron has no future occurrence")
+			}
+			r.log.Info("waiting for scheduled probe", "cron", r.cfg.Probe.Cron, "next_run", next)
+			delay = time.Until(next)
+		}
+		if !wait(ctx, delay) {
 			return nil
 		}
 	}

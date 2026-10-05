@@ -6,17 +6,17 @@ import (
 )
 
 func TestCronShanghaiSlots(t *testing.T) {
-	s, err := (Probe{Cron: "CRON_TZ=Asia/Shanghai 0 1,7,13,19 * * *"}).Schedule()
+	s, err := (Probe{Cron: "CRON_TZ=Asia/Shanghai 0 8,20,22 * * *"}).Schedule()
 	if err != nil {
 		t.Fatal(err)
 	}
 	cases := map[string]string{
-		"2026-10-04T16:59:59Z": "2026-10-04T17:00:00Z",
-		"2026-10-04T17:00:00Z": "2026-10-04T23:00:00Z",
-		"2026-10-04T23:00:00Z": "2026-10-05T05:00:00Z",
-		"2026-10-05T05:00:00Z": "2026-10-05T11:00:00Z",
-		"2026-10-05T11:00:00Z": "2026-10-05T17:00:00Z",
+		"2026-10-04T23:59:59Z": "2026-10-05T00:00:00Z",
+		"2026-10-05T00:00:00Z": "2026-10-05T12:00:00Z",
+		"2026-10-05T12:00:00Z": "2026-10-05T14:00:00Z",
+		"2026-10-05T14:00:00Z": "2026-10-06T00:00:00Z",
 	}
+
 	for input, want := range cases {
 		now, _ := time.Parse(time.RFC3339, input)
 		if got := s.Next(now).UTC().Format(time.RFC3339); got != want {
